@@ -1,4 +1,4 @@
-module botjob.com
+module github.com/MithraRa/hh-bot
 
 go 1.20
 

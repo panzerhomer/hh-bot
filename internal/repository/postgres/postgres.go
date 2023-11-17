@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"botjob.com/config"
+	"github.com/MithraRa/hh-bot/config"
 	_ "github.com/lib/pq"
 )
 

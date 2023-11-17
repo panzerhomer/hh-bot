@@ -4,3 +4,6 @@
 
 # Файлы конфигурации
 .env
+
+postgres
+/postgres

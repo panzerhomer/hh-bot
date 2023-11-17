@@ -3,8 +3,8 @@ package app
 import (
 	"sync"
 
-	"botjob.com/config"
-	repository "botjob.com/internal/repository/postgres"
+	"github.com/MithraRa/hh-bot/config"
+	repository "github.com/MithraRa/hh-bot/internal/repository/postgres"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	log "github.com/sirupsen/logrus"
 )

@@ -3,8 +3,8 @@ package main
 import (
 	"log"
 
-	"botjob.com/config"
-	repository "botjob.com/internal/repository/postgres"
+	"github.com/MithraRa/hh-bot/config"
+	repository "github.com/MithraRa/hh-bot/internal/repository/postgres"
 )
 
 func main() {
