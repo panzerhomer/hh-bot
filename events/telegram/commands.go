@@ -14,6 +14,18 @@ const (
 	SettingsCmd = "/settings"
 	HelpCmd     = "/help"
 	StartCmd    = "/start"
+	MeCmd       = "/me"
+)
+
+const (
+	exp1 = "Нет опыта"
+	exp2 = "От 1 года до 3 лет"
+	exp3 = "От 3 года до 6 лет"
+	exp4 = "Более 6 лет"
+)
+
+const (
+	sal1 = "з/п не указана"
 )
 
 var (
@@ -26,90 +38,107 @@ var (
 	backButton  = "Back"
 	closeButton = "Close"
 
-	replyMarkup = map[string]interface{}{
-		"inline_keyboard": [][]map[string]interface{}{
+	// replyMarkupInlineKeyboard = map[string]interface{}{
+	// 	"inline_keyboard": [][]map[string]interface{}{
+	// 		{
+	// 			{"text": backButton, "callback_data": backButton},
+	// 			{"text": nextButton, "callback_data": nextButton},
+	// 		},
+	// 		{
+	// 			{"text": closeButton, "callback_data": closeButton},
+	// 		},
+	// 	},
+	// 	"resize_keyboard": true,
+	// }
+	replyMarkupKeyboardExp = map[string]interface{}{
+		"keyboard": [][]map[string]interface{}{
 			{
-				{"text": backButton, "callback_data": backButton},
-				{"text": nextButton, "callback_data": nextButton},
+				{"text": exp1, "callback_data": exp1},
+				{"text": exp2, "callback_data": exp2},
 			},
 			{
-				{"text": closeButton, "callback_data": closeButton},
+				{"text": exp3, "callback_data": exp3},
+				{"text": exp4, "callback_data": exp4},
 			},
 		},
+		"resize_keyboard":   true,
+		"one_time_keyboard": true,
+	}
+
+	emptyBoard = map[string]interface{}{
+		"keyboard": [][]map[string]interface{}{},
 	}
 )
 
 func createMenu(res []models.Vacancy) string {
 	v := res[0]
-	textMenu := fmt.Sprintf("<strong>Вакансия:</strong> %s \n\n <strong>Компания:</strong> %s \n <strong>Город:</strong> %s \n <strong>Зарплата:</strong> %s \n <strong>Опыт:</strong> %s \n <strong>Ссылка:</strong> %s", v.Title, v.Company, v.City, v.Salary, v.Experience, v.URL)
+	textMenu := fmt.Sprintf("<strong>Вакансия:</strong> %s <br/> <strong>Компания:</strong> %s <br/> <strong>Город:</strong> %s <br/> <strong>Зарплата:</strong> %s <br/> <strong>Опыт:</strong> %s <br/> <strong>Ссылка:</strong> %s", v.Title, v.Company, v.City, v.Salary, v.Experience, v.URL)
 
 	return textMenu
 }
 
 func (p *Processor) doCmd(text string, chatID int, userID int, username string, callbackID string, data string) error {
-	// command := strings.TrimSpace(text)
-	command := strings.Split(text, " ")
+	command := strings.TrimSpace(text)
 
-	log.Printf("got new command '%s' from '%s", command[0], username)
-	log.Print(command[1])
+	log.Printf("got new command '%s' from '%s", command, username)
 	log.Printf("got new click '%s' from '%s", data, callbackID)
-
-	switch command[0] {
-	case StartCmd:
-		return p.sendHello(chatID, msgHello)
-	case HelpCmd:
-		return p.sendMenu(chatID, username, callbackID, data, replyMarkup)
-	case SearchCmd:
-		return p.sendVacancies(chatID, text)
-
-		// return p.sendHello(chatID, command)
-	// case SettingsCmd:
-	// 	return p.sendSettings(chatID)
-	default:
-		// return p.sendMenu(chatID, username, callbackID, data, replyMarkup)
-		return p.sendHello(chatID, msgUnknownCommand)
+	_, ok := p.users[userID]
+	if !ok {
+		p.users[userID] = &UserData{StateDefault, []string{}}
 	}
-	// if strings.HasPrefix(text, "/") {
-	// 	return p.processCommand(chatID, text, username)
-	// } else if callbackID != "" {
-	// 	return p.proccessButton(chatID, callbackID, data)
-	// } else {
-	// 	return p.tg.SendMessage(chatID, msgUnknownCommand, "")
-	// }
+
+	log.Print("user state", p.users[userID])
+
+	switch command {
+	case MeCmd:
+		p.mutex.Lock()
+		defer p.mutex.Unlock()
+		if len(p.users[userID].Answers) == 0 {
+			return p.sendMessage(chatID, username+"\n\nempty")
+		}
+		return p.sendMessage(chatID, strings.Join(p.users[userID].Answers, " "))
+	case StartCmd:
+		return p.sendMessage(chatID, msgHello)
+	case SettingsCmd:
+		p.users[userID].State = StateSettingsQuestion1
+		return p.sendMessage(chatID, msgCity)
+	case SearchCmd:
+		p.users[userID].State = StateSearch
+		return p.sendVacancies(chatID, text)
+	default:
+		return p.handleMessage(chatID, userID, text, callbackID, data)
+	}
 }
 
-func (p *Processor) proccessButton(chatID int, callbackID string, data string) error {
-	return nil
+func (p *Processor) handleMessage(chatID int, userID int, text string, callbackID string, data string) error {
+	switch p.users[userID].State {
+	case StateSettingsQuestion1:
+		p.users[userID].State = StateSettingsQuestion2
+		p.users[userID].Answers = append(p.users[userID].Answers, text)
+		return p.sendMessage(chatID, msgSalary)
+	case StateSettingsQuestion2:
+		p.users[userID].State = StateSettingsQuestion3
+		p.users[userID].Answers = append(p.users[userID].Answers, text)
+		return p.sendKeyboard(chatID, msgExperience)
+	case StateSettingsQuestion3:
+		p.users[userID].State = StateDefault
+		p.users[userID].Answers = append(p.users[userID].Answers, text)
+		return p.tg.SendMessage(chatID, msgSettingsSuccess, "")
+	default:
+		return p.sendMessage(chatID, msgUnknownCommand)
+	}
 }
 
-// func (p *Processor) processCommand(chatID int, text string, username string) error {
-// 	command := ""
-// 	if strings.HasPrefix(text, SearchCmd) {
-// 		command = SearchCmd
-// 	} else if strings.HasPrefix(text, HelpCmd) {
-// 		command = HelpCmd
-// 	} else if strings.HasPrefix(text, SettingsCmd) {
-// 		command = SettingsCmd
-// 	}
+func (p *Processor) sendKeyboard(chatID int, text string) error {
+	replyMarkupJSON, err := json.Marshal(replyMarkupKeyboardExp)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-// 	switch command {
-// 	case StartCmd:
-// 		return p.sendHello(chatID, msgHello)
-// 	case HelpCmd:
-// 		return p.sendMenu(chatID, username, callbackID, data, replyMarkup)
-// 	case SearchCmd:
-// 		// return p.sendVacancies(chatID, text)
+	return p.tg.SendMessage(chatID, text, string(replyMarkupJSON))
+}
 
-// 		return p.sendHello(chatID, command)
-// 	// case SettingsCmd:
-// 	// 	return p.sendSettings(chatID)
-// 	default:
-// 		// return p.sendMenu(chatID, username, callbackID, data, replyMarkup)
-// 		return p.sendHello(chatID, msgUnknownCommand)
-// 	}
-// }
-
-func (p *Processor) sendMenu(chatID int, username string, callbackID string, data string, replyMarkup any) error {
+func (p *Processor) sendMenu(chatID int, userID int, callbackID string, data string, replyMarkup any) error {
 	replyMarkupJSON, err := json.Marshal(replyMarkup)
 	if err != nil {
 		log.Fatal(err)
@@ -121,8 +150,8 @@ func (p *Processor) sendMenu(chatID int, username string, callbackID string, dat
 func (p *Processor) sendVacancies(chatID int, text string) error {
 	filter := models.Filter{}
 	filter.City = "Москва"
-	search := strings.Split(text, " ")
-	res, err := p.storage.GetVacancies(context.Background(), filter, "аналитик")
+	search := strings.Trim(text, " ")
+	res, err := p.storage.GetVacancies(context.Background(), filter, search)
 	if err != nil {
 		return err
 	}
@@ -135,6 +164,6 @@ func (p *Processor) sendHelp(chatID int) error {
 	return p.tg.SendMessage(chatID, msgHelp, "")
 }
 
-func (p *Processor) sendHello(chatID int, text string) error {
+func (p *Processor) sendMessage(chatID int, text string) error {
 	return p.tg.SendMessage(chatID, text, "")
 }

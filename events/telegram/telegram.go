@@ -6,13 +6,34 @@ import (
 	"HHBot/storage"
 	"HHBot/utils"
 	"errors"
-	"log"
+	"sync"
 )
+
+const activeUsers = 1000
+
+const (
+	StateDefault = "/start"
+	StateSearch  = "/search"
+)
+
+const (
+	StateSettings          = "/settings"
+	StateSettingsQuestion1 = "/settings-1"
+	StateSettingsQuestion2 = "/settings-2"
+	StateSettingsQuestion3 = "/settings-3"
+)
+
+type UserData struct {
+	State   string
+	Answers []string
+}
 
 type Processor struct {
 	tg      *telegram.Client
 	offset  int
 	storage storage.Storage
+	users   map[int]*UserData
+	mutex   *sync.Mutex
 }
 
 type Meta struct {
@@ -38,6 +59,8 @@ func New(client *telegram.Client, storage storage.Storage) *Processor {
 	return &Processor{
 		tg:      client,
 		storage: storage,
+		users:   make(map[int]*UserData, activeUsers),
+		mutex:   &sync.Mutex{},
 	}
 }
 
@@ -131,7 +154,6 @@ func event(upd telegram.Update) events.Event {
 			UserID:   upd.Message.From.ID,
 			Username: upd.Message.From.Username,
 		}
-		log.Println("[event upd]", upd.Message, updType)
 	}
 
 	if updType == events.CallbackQuery {
@@ -142,9 +164,6 @@ func event(upd telegram.Update) events.Event {
 			CallbackID: upd.CallbackQuery.ID,
 			Data:       upd.CallbackQuery.Data,
 		}
-
-		// res, _ := json.Marshal(upd)
-		// log.Println("[event upd]", string(res))
 	}
 
 	return res
