@@ -1,9 +1,0 @@
-# Файлы конфигурации IDE
-.idea/
-.vscode/
-
-# Файлы конфигурации
-.env
-
-postgres
-/postgres

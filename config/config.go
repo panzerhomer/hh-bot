@@ -6,16 +6,27 @@ import (
 	"github.com/joho/godotenv"
 )
 
-type Config struct {
-	DBUser     string
-	DBPassword string
-	DBName     string
-	DBPort     string
-	AppPort    string
-	Host       string
-	TokenHH    string
-	TokenTG    string
-}
+type (
+	Config struct {
+		Bot      Bot
+		Postgres Postgres
+	}
+
+	Bot struct {
+		Name  string
+		Token string
+		Host  string
+	}
+
+	Postgres struct {
+		Host     string
+		Port     string
+		Username string
+		Password string
+		DBName   string
+		SSL      string
+	}
+)
 
 func GetConfig(path string) (*Config, error) {
 	config := &Config{}
@@ -23,14 +34,21 @@ func GetConfig(path string) (*Config, error) {
 		return config, err
 	}
 
-	config.DBUser = os.Getenv("DB_USER")
-	config.DBPassword = os.Getenv("DB_PASSWORD")
-	config.DBName = os.Getenv("DB_NAME")
-	config.DBPort = os.Getenv("DB_PORT")
-	config.AppPort = os.Getenv("APP_PORT")
-	config.Host = os.Getenv("HOST")
-	config.TokenHH = os.Getenv("TOKEN_HH")
-	config.TokenTG = os.Getenv("TOKEN_TG")
+	bot := Bot{
+		Name:  os.Getenv("BOT_NAME"),
+		Token: os.Getenv("BOT_TGTOKEN"),
+		Host:  os.Getenv("BOT_HOST"),
+	}
+	posgres := Postgres{
+		Host:     os.Getenv("POSTGRES_HOST"),
+		Port:     os.Getenv("POSTGRES_PORT"),
+		Username: os.Getenv("POSTGRES_USERNAME"),
+		Password: os.Getenv("POSTGRES_PASSWORD"),
+		DBName:   os.Getenv("POSTGRES_DBNAME"),
+		SSL:      os.Getenv("POSTGRES_SSL_MODE"),
+	}
+	config.Bot = bot
+	config.Postgres = posgres
 
 	return config, nil
 }
