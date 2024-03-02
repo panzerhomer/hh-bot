@@ -1,17 +1,12 @@
 CREATE TABLE IF NOT EXISTS users (
-    id INTEGER,
+    id bigint,
     experience text,
     salary text,
     city text
 );
 
-CREATE TABLE IF NOT EXISTS states (
-    id integer 
-    active 
-)
-
 CREATE TABLE IF NOT EXISTS vacancies (
-    id integer,
+    id bigint,
     city text,
     company text,
     industry text,
@@ -22,6 +17,7 @@ CREATE TABLE IF NOT EXISTS vacancies (
     salary text,
     url text
 );
+
 
 INSERT INTO vacancies 
 (id, city, company, industry, title, keywords, skills, experience, salary, url)

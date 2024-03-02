@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 )
 
@@ -29,27 +30,25 @@ const (
 )
 
 var (
-	// Menu texts
-	firstMenu = "<b>Menu 1</b>\n\nA beautiful menu with a shiny inline button."
-	// secondMenu = "<b>Menu 2</b>\n\nA better menu with even more shiny inline buttons."
+	firstMenu = "menu with a shiny inline button."
 
-	// Button texts
 	nextButton  = "Next"
 	backButton  = "Back"
 	closeButton = "Close"
 
-	// replyMarkupInlineKeyboard = map[string]interface{}{
-	// 	"inline_keyboard": [][]map[string]interface{}{
-	// 		{
-	// 			{"text": backButton, "callback_data": backButton},
-	// 			{"text": nextButton, "callback_data": nextButton},
-	// 		},
-	// 		{
-	// 			{"text": closeButton, "callback_data": closeButton},
-	// 		},
-	// 	},
-	// 	"resize_keyboard": true,
-	// }
+	replyMarkupInlineKeyboard = map[string]interface{}{
+		"inline_keyboard": [][]map[string]interface{}{
+			{
+				{"text": backButton, "callback_data": backButton},
+				{"text": nextButton, "callback_data": nextButton},
+			},
+			{
+				{"text": closeButton, "callback_data": closeButton},
+			},
+		},
+		"resize_keyboard": true,
+	}
+
 	replyMarkupKeyboardExp = map[string]interface{}{
 		"keyboard": [][]map[string]interface{}{
 			{
@@ -70,67 +69,127 @@ var (
 	}
 )
 
-func createMenu(res []models.Vacancy) string {
-	v := res[0]
-	textMenu := fmt.Sprintf("<strong>Вакансия:</strong> %s <br/> <strong>Компания:</strong> %s <br/> <strong>Город:</strong> %s <br/> <strong>Зарплата:</strong> %s <br/> <strong>Опыт:</strong> %s <br/> <strong>Ссылка:</strong> %s", v.Title, v.Company, v.City, v.Salary, v.Experience, v.URL)
+func createVacancy(v *models.Vacancy) string {
+	text := fmt.Sprintf(`
+<strong>Вакансия:</strong> %s  
+<strong>Компания:</strong> %s  
+<strong>Город:</strong> %s 
+<strong>Зарплата:</strong> %s  
+<strong>Опыт:</strong> %s 
+<strong>Навыки:</strong> %s
+<a href="%s">Cсылка на вакансию</a>
+`,
+		v.Title, v.Company, v.City, v.Salary, v.Experience, v.Skills, v.URL)
+	return text
+}
 
-	return textMenu
+func createMenu(res []models.Vacancy) string {
+	vacancies := ""
+	for i := 0; i < len(res); i++ {
+		vacancies += createVacancy(&res[i])
+	}
+	return vacancies
+}
+
+func createMe(userID int, f *models.Filter) string {
+	id := strconv.Itoa(userID)
+	textMe := fmt.Sprintf(`
+<strong>My settings ⚙️</strong> 
+
+<strong>ID:</strong> %s 
+<strong>City:</strong> %s 
+<strong>Salary:</strong> %s 
+<strong>Experience:</strong> %s 
+	`, id, f.City, f.Salary, f.Experience)
+	return textMe
 }
 
 func (p *Processor) doCmd(text string, chatID int, userID int, username string, callbackID string, data string) error {
 	command := strings.TrimSpace(text)
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
 
 	log.Printf("got new command '%s' from '%s", command, username)
 	log.Printf("got new click '%s' from '%s", data, callbackID)
+
 	_, ok := p.users[userID]
 	if !ok {
 		p.users[userID] = &UserData{StateDefault, []string{}}
 	}
 
-	log.Print("user state", p.users[userID])
-
 	switch command {
 	case MeCmd:
-		p.mutex.Lock()
-		defer p.mutex.Unlock()
-		if len(p.users[userID].Answers) == 0 {
-			return p.sendMessage(chatID, username+"\n\nempty")
+		filter := p.sendMe(chatID, userID)
+		if filter != nil {
+			text := createMe(userID, filter)
+			return p.sendMessage(chatID, text)
 		}
-		return p.sendMessage(chatID, strings.Join(p.users[userID].Answers, " "))
+		return p.sendMessage(chatID, "error")
 	case StartCmd:
+		p.users[userID].State = StateDefault
 		return p.sendMessage(chatID, msgHello)
 	case SettingsCmd:
 		p.users[userID].State = StateSettingsQuestion1
 		return p.sendMessage(chatID, msgCity)
 	case SearchCmd:
 		p.users[userID].State = StateSearch
-		return p.sendVacancies(chatID, text)
+		return p.sendMessage(chatID, msgSearch)
 	default:
 		return p.handleMessage(chatID, userID, text, callbackID, data)
 	}
 }
 
 func (p *Processor) handleMessage(chatID int, userID int, text string, callbackID string, data string) error {
-	switch p.users[userID].State {
+	currentUser := p.users[userID]
+
+	switch currentUser.State {
 	case StateSettingsQuestion1:
-		p.users[userID].State = StateSettingsQuestion2
-		p.users[userID].Answers = append(p.users[userID].Answers, text)
+		currentUser.State = StateSettingsQuestion2
+		currentUser.Answers = append(currentUser.Answers, text)
 		return p.sendMessage(chatID, msgSalary)
 	case StateSettingsQuestion2:
-		p.users[userID].State = StateSettingsQuestion3
-		p.users[userID].Answers = append(p.users[userID].Answers, text)
-		return p.sendKeyboard(chatID, msgExperience)
+		currentUser.State = StateSettingsQuestion3
+		currentUser.Answers = append(currentUser.Answers, text)
+		return p.sendKeyboard(chatID, msgExperience, replyMarkupKeyboardExp)
 	case StateSettingsQuestion3:
-		p.users[userID].State = StateDefault
-		p.users[userID].Answers = append(p.users[userID].Answers, text)
-		return p.tg.SendMessage(chatID, msgSettingsSuccess, "")
+		currentUser.State = StateSearch
+		currentUser.Answers = append(currentUser.Answers, text)
+		f := models.Filter{}
+		f.UserID = userID
+		f.City = currentUser.Answers[0]
+		f.Salary = currentUser.Answers[1]
+		f.Experience = currentUser.Answers[2]
+		p.storage.SetSettings(context.Background(), &f)
+		return p.sendKeyboard(chatID, msgSettingsSuccess, emptyBoard)
+	case StateSearch:
+		f := models.Filter{}
+		if len(currentUser.Answers) > 0 {
+			f = createFilter(userID, currentUser.Answers)
+		} else {
+			f, _ = p.storage.GetSettings(context.Background(), userID)
+		}
+		return p.sendVacancies(chatID, userID, text, f, replyMarkupInlineKeyboard)
 	default:
 		return p.sendMessage(chatID, msgUnknownCommand)
 	}
 }
 
-func (p *Processor) sendKeyboard(chatID int, text string) error {
-	replyMarkupJSON, err := json.Marshal(replyMarkupKeyboardExp)
+func createFilter(userID int, answers []string) models.Filter {
+	filter := models.Filter{}
+	filter.UserID = userID
+	filter.City = answers[0]
+	filter.Salary = answers[1]
+	filter.Experience = answers[2]
+	return filter
+}
+
+func (p *Processor) sendMe(chatID int, userID int) *models.Filter {
+	filter, _ := p.storage.GetSettings(context.Background(), userID)
+	return &filter
+}
+
+func (p *Processor) sendKeyboard(chatID int, text string, board any) error {
+	replyMarkupJSON, err := json.Marshal(board)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -138,30 +197,22 @@ func (p *Processor) sendKeyboard(chatID int, text string) error {
 	return p.tg.SendMessage(chatID, text, string(replyMarkupJSON))
 }
 
-func (p *Processor) sendMenu(chatID int, userID int, callbackID string, data string, replyMarkup any) error {
-	replyMarkupJSON, err := json.Marshal(replyMarkup)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return p.tg.SendMessage(chatID, firstMenu, string(replyMarkupJSON))
-}
-
-func (p *Processor) sendVacancies(chatID int, text string) error {
-	filter := models.Filter{}
-	filter.City = "Москва"
+func (p *Processor) sendVacancies(chatID int, userID int, text string, f models.Filter, keyboard any) error {
 	search := strings.Trim(text, " ")
-	res, err := p.storage.GetVacancies(context.Background(), filter, search)
+	res, err := p.storage.GetVacancies(context.Background(), &f, search)
 	if err != nil {
 		return err
 	}
-	log.Print("[sendVacancies]", res, search)
-	menu := createMenu(res)
-	return p.tg.SendMessage(chatID, menu, "")
-}
 
-func (p *Processor) sendHelp(chatID int) error {
-	return p.tg.SendMessage(chatID, msgHelp, "")
+	if len(res) == 0 {
+		p.sendMessage(chatID, msgNoVacancies)
+	}
+
+	menu := createMenu(res)
+
+	keyBoardJSON, _ := json.Marshal(keyboard)
+
+	return p.tg.SendMessage(chatID, menu, string(keyBoardJSON))
 }
 
 func (p *Processor) sendMessage(chatID int, text string) error {

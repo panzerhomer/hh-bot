@@ -3,7 +3,6 @@ package telegram
 import (
 	"HHBot/utils"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -51,13 +50,7 @@ func (c *Client) Updates(offset int, limit int) (updates []Update, err error) {
 	if err := json.Unmarshal(data, &res); err != nil {
 		return nil, err
 	}
-	if len(res.Result) > 0 {
-		ress, _ := json.MarshalIndent(res.Result[0], "", "  ")
-		fmt.Println("[Client, Updates] ", string(ress))
-	} else {
-		ress, _ := json.MarshalIndent(res.Result, "", "  ")
-		fmt.Println("[Client, Updates] ", string(ress))
-	}
+
 	return res.Result, nil
 }
 
@@ -67,6 +60,7 @@ func (c *Client) SendMessage(chatID int, text string, markup string) error {
 	q.Add("text", text)
 	q.Add("reply_markup", markup)
 	q.Add("parse_mode", "HTML")
+	q.Add("disable_web_page_preview", "True")
 
 	_, err := c.doRequest(sendMessageMethod, q)
 	if err != nil {

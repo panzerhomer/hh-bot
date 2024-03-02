@@ -39,6 +39,8 @@ func GetConfig(path string) (*Config, error) {
 		Token: os.Getenv("BOT_TGTOKEN"),
 		Host:  os.Getenv("BOT_HOST"),
 	}
+	config.Bot = bot
+
 	posgres := Postgres{
 		Host:     os.Getenv("POSTGRES_HOST"),
 		Port:     os.Getenv("POSTGRES_PORT"),
@@ -47,7 +49,6 @@ func GetConfig(path string) (*Config, error) {
 		DBName:   os.Getenv("POSTGRES_DBNAME"),
 		SSL:      os.Getenv("POSTGRES_SSL_MODE"),
 	}
-	config.Bot = bot
 	config.Postgres = posgres
 
 	return config, nil
